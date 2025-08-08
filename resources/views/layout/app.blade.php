@@ -13,11 +13,11 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
-        @vite(['resources/sass/app.scss', 'resources/js/app.js'])
         
         @stack('styles')
     </head>
     <body class="font-sans antialiased">
+        @vite(['resources/sass/app.scss', 'resources/js/app.js'])
         <div id="app">
             <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
                 <div class="container">
@@ -51,7 +51,9 @@
             </main>
 
         </div>
-
+<script>
+    console.log("Antes del stack: typeof $ =", typeof $);
+</script>
         @stack('scripts')
     </body>
 </html>
