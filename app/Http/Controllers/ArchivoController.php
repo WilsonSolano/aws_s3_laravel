@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Archivo;
+use AWS\CRT\Log as LogAws;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class ArchivoController extends Controller
@@ -38,10 +40,7 @@ class ArchivoController extends Controller
                 $carpeta = $extension === 'json' ? 'archivos-6/json' : 'archivos-6/pdf';
 
                 // Crear la carpeta si no existe
-                if (!Storage::disk('s3')->exists($carpeta)) {
-                    // Crear un archivo temporal para forzar la creación del directorio
-                    Storage::disk('s3')->put($carpeta . '/.gitkeep', '');
-                }
+                $this->crearCarpetaSiNoExiste($carpeta);
 
                 // Subir archivo a S3
                 $rutaArchivo = Storage::disk('s3')->put($carpeta, $archivo);
@@ -65,39 +64,43 @@ class ArchivoController extends Controller
                     'nombre_original' => $infoArchivo['nombre_original'],
                     'ruta_s3' => $infoArchivo['ruta_s3'],
                     'url_publica' => $infoArchivo['url_publica'],
-                    'tamaño' => $infoArchivo['tamaño'],
+                    'tamano' => $infoArchivo['tamaño'],
                     'tipo_archivo' => $infoArchivo['extension'],
-                    'usuario_id' => auth()->id(),
                 ]);
             } catch (\Exception $e) {
                 $errores[] = [
                     'archivo' => $archivo->getClientOriginalName(),
                     'error' => 'Error al subir el archivo: ' . $e->getMessage()
                 ];
+                Log::warning("Error al subir el archivo {$archivo->getClientOriginalName()}: " . $e->getMessage());
             }
         }
 
-        // Preparar respuesta
-        $mensaje = '';
-        $tipoMensaje = 'success';
+        // Preparar respuesta JSON
+        $response = [
+            'success' => count($archivosSubidos) > 0,
+            'archivos_subidos' => $archivosSubidos,
+            'errores' => $errores,
+            'total_subidos' => count($archivosSubidos),
+            'total_errores' => count($errores),
+        ];
 
         if (count($archivosSubidos) > 0) {
             $totalSubidos = count($archivosSubidos);
-            $mensaje = "Se han subido exitosamente {$totalSubidos} archivo(s).";
+            $response['mensaje'] = "Se han subido exitosamente {$totalSubidos} archivo(s).";
 
             if (count($errores) > 0) {
-                $mensaje .= " Sin embargo, algunos archivos no se pudieron procesar.";
-                $tipoMensaje = 'warning';
+                $response['mensaje'] .= " Sin embargo, algunos archivos no se pudieron procesar.";
+                $response['tipo'] = 'warning';
+            } else {
+                $response['tipo'] = 'success';
             }
         } else {
-            $mensaje = "No se pudieron subir los archivos.";
-            $tipoMensaje = 'error';
+            $response['mensaje'] = "No se pudieron subir los archivos.";
+            $response['tipo'] = 'error';
         }
 
-        return back()
-            ->with($tipoMensaje, $mensaje)
-            ->with('archivos_subidos', $archivosSubidos)
-            ->with('errores', $errores);
+        return response()->json($response, 200);
     }
 
     public function eliminarArchivo($rutaArchivo)
@@ -111,7 +114,7 @@ class ArchivoController extends Controller
             return response()->json([
                 'success' => true,
                 'mensaje' => 'Archivo eliminado correctamente.'
-            ]);
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -124,14 +127,21 @@ class ArchivoController extends Controller
     {
         try {
             if (!Storage::disk('s3')->exists($rutaArchivo)) {
-                abort(404, 'Archivo no encontrado.');
+                return response()->json([
+                    'success' => false,
+                    'mensaje' => 'Archivo no encontrado.'
+                ], 404);
             }
 
             $nombreArchivo = basename($rutaArchivo);
 
             return Storage::disk('s3')->download($rutaArchivo, $nombreArchivo);
         } catch (\Exception $e) {
-            abort(500, 'Error al descargar el archivo: ' . $e->getMessage());
+            Log::warning("Error al descargar el archivo {$rutaArchivo}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'mensaje' => 'Error al descargar el archivo: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -146,7 +156,7 @@ class ArchivoController extends Controller
                 Storage::disk('s3')->put($carpeta . '/.gitkeep', '# Carpeta creada automáticamente');
             }
         } catch (\Exception $e) {
-            \Log::warning("No se pudo crear la carpeta {$carpeta}: " . $e->getMessage());
+            Log::warning("No se pudo crear la carpeta {$carpeta}: " . $e->getMessage());
         }
     }
 }

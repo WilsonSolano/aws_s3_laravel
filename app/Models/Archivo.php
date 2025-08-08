@@ -12,8 +12,10 @@ class Archivo extends Model
     protected $table = 'archivos';
 
     protected $fillable = [
-        'nombre',
-        'ruta',
-        'formato',
+        'nombre_original',
+        'ruta_s3',
+        'url_publica',
+        'tamano',
+        'tipo_archivo',
     ];
 }

@@ -79,14 +79,14 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-            if (typeof $ !== 'undefined') {
-                $(function () {
-                    let selectedFiles = [];
-                    console.log('jQuery cargado y listo (desde stack)');
-                });
-            } else {
-                console.error('$ no está definido aún');
-            }
+    if (typeof $ !== 'undefined') {
+        $(function () {
+            let selectedFiles = [];
+            console.log('jQuery cargado y listo (desde stack)');
+        });
+    } else {
+        console.error('$ no está definido aún');
+    }
 
     let selectedFiles = [];
 
@@ -212,17 +212,46 @@
             processData: false,
             contentType: false,
             success: function(response) {
-                // Laravel redirige con back(), así que manejamos la respuesta
-                showAlert(`Se han subido ${selectedFiles.length} archivo(s) correctamente.`, 'success');
-                clearFiles();
+                console.log('Respuesta del servidor:', response);
+                
+                if (response.success) {
+                    // Mostrar mensaje de éxito
+                    let alertType = response.tipo || 'success';
+                    showAlert(response.mensaje, alertType);
+                    
+                    // Si hay errores, mostrarlos también
+                    if (response.errores && response.errores.length > 0) {
+                        response.errores.forEach(error => {
+                            showAlert(`Error en ${error.archivo}: ${error.error}`, 'danger');
+                        });
+                    }
+                    
+                    // Limpiar archivos seleccionados solo si hay éxito
+                    clearFiles();
+                    
+                    // Log de archivos subidos para debug
+                    if (response.archivos_subidos && response.archivos_subidos.length > 0) {
+                        console.log('Archivos subidos exitosamente:', response.archivos_subidos);
+                    }
+                } else {
+                    showAlert(response.mensaje || 'Error desconocido al subir los archivos.', 'danger');
+                }
             },
             error: function(xhr) {
+                console.error('Error en la petición:', xhr);
                 let errorMessage = 'Error al subir los archivos.';
                 
                 if (xhr.status === 422) {
                     // Errores de validación
-                    const errors = xhr.responseJSON.errors;
-                    errorMessage = Object.values(errors).flat().join(' ');
+                    const errors = xhr.responseJSON?.errors || {};
+                    const errorMessages = Object.values(errors).flat();
+                    errorMessage = errorMessages.length > 0 ? errorMessages.join(' ') : errorMessage;
+                } else if (xhr.responseJSON?.mensaje) {
+                    errorMessage = xhr.responseJSON.mensaje;
+                } else if (xhr.status === 500) {
+                    errorMessage = 'Error interno del servidor. Intente nuevamente.';
+                } else if (xhr.status === 413) {
+                    errorMessage = 'Los archivos son demasiado grandes.';
                 }
                 
                 showAlert(errorMessage, 'danger');
@@ -234,11 +263,11 @@
     }
 
     function showAlert(message, type) {
-        // Remover alertas existentes
-        $('.custom-alert').remove();
+        // Remover alertas existentes del mismo tipo para evitar spam
+        $(`.custom-alert.alert-${type}`).remove();
         
         const alert = $(`
-            <div class="alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3 custom-alert" style="z-index: 9999;">
+            <div class="alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3 custom-alert" style="z-index: 9999; max-width: 500px;">
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
@@ -246,10 +275,11 @@
         
         $('body').append(alert);
         
+        // Auto-cerrar después de 5 segundos
         setTimeout(() => {
             alert.remove();
-        }, 4000);
+        }, 5000);
     }
 });
-</script>   
+</script>
 @endpush
